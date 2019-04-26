@@ -1,0 +1,3 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/soybean/soybean-large.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/soybean/soybean-large.test
+http://archive.ics.uci.edu/ml/machine-learning-databases/soybean/soybean-small.data

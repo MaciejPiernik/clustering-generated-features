@@ -1,0 +1,2 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/image/segmentation.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/image/segmentation.test

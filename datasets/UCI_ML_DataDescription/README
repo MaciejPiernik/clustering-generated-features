@@ -1,0 +1,9 @@
+This folder contains a desription usable for
+reading 92 data sets from
+
+  http://archive.ics.uci.edu/ml/datasets.html
+
+into R Statistical Environment using CRAN package readMLData
+
+  http://cran.at.r-project.org/web/packages/readMLData/
+

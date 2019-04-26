@@ -1,0 +1,2 @@
+# Uncompress the file "page-blocks.data.Z" after download, for example, using "gunzip".
+http://archive.ics.uci.edu/ml/machine-learning-databases/page-blocks/page-blocks.data.Z

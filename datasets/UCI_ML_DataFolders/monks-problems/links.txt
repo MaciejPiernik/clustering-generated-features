@@ -1,0 +1,6 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/monks-problems/monks-1.train
+http://archive.ics.uci.edu/ml/machine-learning-databases/monks-problems/monks-1.test
+http://archive.ics.uci.edu/ml/machine-learning-databases/monks-problems/monks-2.train
+http://archive.ics.uci.edu/ml/machine-learning-databases/monks-problems/monks-2.test
+http://archive.ics.uci.edu/ml/machine-learning-databases/monks-problems/monks-3.train
+http://archive.ics.uci.edu/ml/machine-learning-databases/monks-problems/monks-3.test

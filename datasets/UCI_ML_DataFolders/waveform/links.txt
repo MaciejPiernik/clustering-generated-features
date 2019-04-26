@@ -1,0 +1,2 @@
+# Uncompress the file "waveform-+noise.data.Z" after download, for example, using "gunzip".
+http://archive.ics.uci.edu/ml/machine-learning-databases/waveform/waveform-+noise.data.Z

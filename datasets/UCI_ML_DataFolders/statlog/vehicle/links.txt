@@ -1,0 +1,9 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xaa.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xab.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xac.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xad.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xae.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xaf.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xag.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xah.dat
+http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/vehicle/xai.dat

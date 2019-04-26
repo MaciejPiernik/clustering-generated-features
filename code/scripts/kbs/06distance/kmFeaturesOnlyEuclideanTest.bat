@@ -1,0 +1,1 @@
+echo Wyniki nale¿y wzi¹æ z eksperymentu 02clustering\kmFeaturesOnlyTest.bat

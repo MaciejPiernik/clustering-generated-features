@@ -1,0 +1,2 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.tra
+http://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.tes

@@ -1,0 +1,6 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/mfeat/mfeat-fac
+http://archive.ics.uci.edu/ml/machine-learning-databases/mfeat/mfeat-fou
+http://archive.ics.uci.edu/ml/machine-learning-databases/mfeat/mfeat-kar
+http://archive.ics.uci.edu/ml/machine-learning-databases/mfeat/mfeat-mor
+http://archive.ics.uci.edu/ml/machine-learning-databases/mfeat/mfeat-pix
+http://archive.ics.uci.edu/ml/machine-learning-databases/mfeat/mfeat-zer

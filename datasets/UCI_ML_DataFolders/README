@@ -1,0 +1,35 @@
+This directory contains subdirectories in the same structure
+as a subset of UCI Machine Learning Repository. The file
+"links.txt" in each directory contains URLs of the files of
+the data sets contained in this directory. The data may be
+downloaded, for example, using "wget" command line tool. See
+also the function "dsDownload()" in CRAN package "readMLData",
+which provides a wrapper to "wget" and simplifies its use
+in different directories.
+
+The data sets
+
+  breast-cancer.data
+  lymphography.data
+  primary-tumor.data
+
+cannot be downloaded, since their access is restricted and the
+user has to ask the maintainer of UCI Machine Learning Repository
+for them.
+
+In order to use the downloaded data with CRAN package "readMLData"
+
+  http://cran.at.r-project.org/web/packages/readMLData/index.html
+
+it is necessary to extract the files *.Z, namely
+
+  connect-4/connect-4.data.Z
+  page-blocks/page-blocks.data.Z
+  statlog/shuttle/shuttle.trn.Z
+  waveform/waveform-+noise.data.Z
+
+for example, using "gunzip" or "gzip -d".
+
+The lines 522 and 523 of the file cylinder-bands/bands.data
+should be joined to a single line.
+

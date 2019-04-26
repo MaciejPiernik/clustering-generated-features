@@ -1,0 +1,3 @@
+# The lines 522 and 523 of the file "cylinder-bands/bands.data" should be joined
+# to a single line.
+http://archive.ics.uci.edu/ml/machine-learning-databases/cylinder-bands/bands.data

@@ -1,0 +1,954 @@
+---
+title: "Classification using clustering"
+output: html_document
+author: "[Maciej Piernik](http://www.cs.put.poznan.pl/mpiernik/)"
+date: "`r Sys.Date()`"
+---
+
+The goal of this experiment is to check whether clustering can be used as a feature extraction method for classification.
+The basic premise is to cluster the dataset into k clusters and use each cluster as a new feature or create a single additional feature reflecting the cluster assignment.
+The values of these features would be either binary (example assigned to a cluster or not), continuous (degree of cluster membership), or discrete (cluster number, in case of adding a single feature).
+We would like to investigate:
+
+* whether such features carry any discriminative value (e.g., high information gain or fisher score),
+* whether using such features can improve classification quality,
+* what is the theoretical significance of such features.
+
+***
+
+```{r Libraries, echo=FALSE, results="hide"}
+suppressMessages(source("Clustering.Util.r"))
+suppressMessages(library(readMLData))
+suppressMessages(library(knitr))
+suppressMessages(library(plyr))
+#suppressMessages(library(FSelector))
+suppressMessages(library(ggplot2))
+suppressMessages(library(plotly))
+suppressMessages(library(tidyr))
+suppressMessages(library(kernlab))
+suppressMessages(library(cluster))
+suppressMessages(library(PMCMR))
+#suppressMessages(library(scmamp))
+suppressMessages(library(ggpubr))
+suppressMessages(library(dplyr))
+```
+
+0. Experiment settings
+
+```{r}
+supportedDatasets = c("wine", "breast-cancer-wisconsin", "yeast", "glass", "ecoli",
+             "vowel-context", "iris", "pima-indians-diabetes", "sonar.all",
+             "image-segmentation", "ionosphere", "letter", "magic", "optdigits",
+             "pendigits", "spectrometer", "statlog-satimage", "statlog-vehicle")
+
+supportedClassifiers = c("PART" ,"multinom", "pda", "gbm", "bayesglm", "rpart", "knn", "svmLinear", "svmRadial")
+
+dataset.name = "yeast"
+classifier = "rf"
+
+feature.types = c("factor", "binary", "distance", "binaryFS", "binaryDist", "revDistSquared", "distFS")
+feature.type = feature.types[3]
+measures = c("euclidean", "mahalanobis")
+measure = measures[1]
+clusteringPerClass = FALSE
+newFeaturesOnly = FALSE
+number_of_clusters = 8
+scaling = FALSE;
+
+train_testSplitRatio = 0.5
+folds = 5
+repeats = 2
+
+set.seed(23)
+```
+
+1. Read data
+
+For now, let's use the *`r dataset.name`* dataset.
+```{r echo=FALSE, results='hide'}
+dataset = getDataset(dataset.name, "UCI")
+dataset = preprocessData(dataset)
+list[trainSet, testSet] <- splitDataset(dataset, train_testSplitRatio)
+```
+
+```{r echo=FALSE}
+summary(dataset)
+```
+
+The number of classes in this dataset is `r dim(table(dataset$Class))`.
+
+2. Select the number of clusters
+
+Since our goal is to use the clusters as attributes for classification, it makes sense to use more clusters than there are classes in the dataset.
+```{r echo=FALSE, results='hide', eval=FALSE}
+max.clusters = nrow(trainSet)
+
+wss = nrow(trainSet) * sum(apply(trainSet[, !names(trainSet) %in% "Class"], 2, var))
+tryCatch({
+        for (i in 2:max.clusters) {
+            wss[i] = sum(kmeans(trainSet[, !names(trainSet) %in% "Class"], i)$withinss)
+        }   
+    },
+    error = function(cond) {
+        message(cond)
+    }
+)
+
+p = ggplot(data.frame(wss), aes(x=1:length(wss), y=wss)) + geom_line()
+
+ggplotly(p + theme(plot.margin = unit(c(1,0,1,2), "lines")))
+
+```
+
+The number of clusters found in `r dataset.name` dataset is `r getNumberOfClusters(trainSet[, !names(trainSet) %in% "Class"])`.
+
+3. Clustering
+
+## {.tabset .tabset-fade}
+
+### K-memans clustering
+
+Clustering dataset into `r number_of_clusters` clusters.
+```{r echo=FALSE, results="hide"}
+list[trainSet.km, testSet.km] = addKMeansFeatures(trainSet, testSet, feature.type, scaling, measure, clusteringPerClass, number_of_clusters, newFeaturesOnly)
+```
+
+```{r echo=FALSE}
+DT::datatable(evaluateFeatures(trainSet.km),
+              style="bootstrap", filter = "top", rownames = FALSE, extensions = "Buttons",
+              options = list(
+                  autoWidth = TRUE,
+                  dom = 'Bfrtip',
+                  buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+```
+
+### Affinity propagation clustering
+
+```{r echo=FALSE, result="hide"}
+list[trainSet.ap, testSet.ap] = addAffinityPropagationFeatures(trainSet, testSet, feature.type, scaling, measure, clusteringPerClass, newFeaturesOnly)
+```
+
+```{r echo=FALSE}
+DT::datatable(evaluateFeatures(trainSet.ap),
+              style="bootstrap", filter = "top", rownames = FALSE, extensions = "Buttons",
+              options = list(
+                  autoWidth = TRUE,
+                  dom = 'Bfrtip',
+                  buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+```
+
+### Spectral clustering
+
+```{r echo=FALSE, result="hide", eval=FALSE}
+gap.result = clusGap(trainSet[, !names(trainSet) %in% "Class"], FUN=kmeans, K.max=50)
+number_of_clusters = maxSE(gap.result$Tab[, "gap"], gap.result$Tab[, "SE.sim"], method="Tibs2001SEmax")
+```
+
+```{r echo=FALSE, result="hide"}
+list[trainSet.sc, testSet.sc] = addSpectralClusteringFeatures(trainSet, testSet, feature.type, scaling, measure, number_of_clusters, newFeaturesOnly)
+```
+
+```{r echo=FALSE}
+DT::datatable(evaluateFeatures(trainSet.sc),
+              style="bootstrap", filter = "top", rownames = FALSE, extensions = "Buttons",
+              options = list(
+                  autoWidth = TRUE,
+                  dom = 'Bfrtip',
+                  buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+```
+
+
+##
+
+4. Classification
+
+## {.tabset .tabset-fade}
+
+### Without new features 
+
+* Training
+```{r echo=FALSE, results="hide"}
+fit <- trainClassifier(trainSet, classifier, folds, repeats)
+```
+
+```{r echo=FALSE}
+fit
+```
+
+* Testing
+```{r echo=FALSE}
+evaluateClassifier(fit, testSet)
+```
+
+### With new k-means features
+
+* Training
+```{r echo=FALSE, results="hide"}
+fit.km = trainClassifier(trainSet.km, classifier, folds, repeats)
+```
+
+```{r echo=FALSE}
+fit.km
+```
+
+
+* Testing
+```{r echo=FALSE}
+evaluateClassifier(fit.km, testSet.km)
+```
+
+* Variable importance
+
+```{r echo=FALSE}
+plot(varImp(object=fit.km), main=paste0(classifier, " - Variable Importance"))
+```
+
+
+### With new affinity propagation features
+
+* Training
+```{r echo=FALSE, results="hide"}
+fit.ap = trainClassifier(trainSet.ap, classifier, folds, repeats)
+```
+
+```{r echo=FALSE}
+fit.ap
+```
+
+
+* Testing
+```{r echo=FALSE}
+evaluateClassifier(fit.ap, testSet.ap)
+```
+
+* Variable importance
+
+```{r echo=FALSE}
+plot(varImp(object=fit.ap), main=paste0(classifier, " - Variable Importance"))
+```
+
+### With new spectral clustering features
+
+* Training
+```{r echo=FALSE, results="hide"}
+fit.sc = trainClassifier(trainSet.sc, classifier, folds, repeats)
+```
+
+```{r echo=FALSE}
+fit.sc
+```
+
+
+* Testing
+```{r echo=FALSE}
+evaluateClassifier(fit.sc, testSet.sc)
+```
+
+* Variable importance
+
+```{r echo=FALSE}
+plot(varImp(object=fit.sc), main=paste0(classifier, " - Variable Importance"))
+```
+
+##
+
+5. Experiments
+
+5.1. Comparative evaluation
+
+Let us now perform an experiment with different classifiers over multiple datasets.
+For each setting we will test classification without added features and with features generated using affinity propagation and k-means.
+The experimental methodology is organized as follows.
+Each dataset is scaled and split into training and testing sets with split ratio equal to `r train_testSplitRatio`.
+Next, new features are added to the datasets using both clustering algorithms.
+Afterwards, for each classifier, three models are trained on original, afinity propagation-enriched, and k-means-enriched training sets.
+Training is performed using `r folds`-fold cross-validation repeated `r repeats` times.
+Finally, the trained models are tested on corresponding test sets and evaluated using accuracy and Kohen's kappa.
+
+```{r echo=FALSE, results="hide"}
+output.file = "results/result_all.csv"
+```
+
+```{r echo=FALSE, results="hide"}
+result = read.table(file=output.file, sep=",", header=TRUE)
+
+all = nrow(result[result$Clustering == "no", ])
+
+ap.better = sum((result$Accuracy[result$Clustering == "ap"] > result$Accuracy[result$Clustering == "no"])*1)
+ap.equal = sum((result$Accuracy[result$Clustering == "ap"] == result$Accuracy[result$Clustering == "no"])*1)
+ap.worse = all - ap.better - ap.equal
+
+km.better = sum((result$Accuracy[result$Clustering == "km"] > result$Accuracy[result$Clustering == "no"])*1)
+km.equal = sum((result$Accuracy[result$Clustering == "km"] == result$Accuracy[result$Clustering == "no"])*1)
+km.worse = all - km.better - km.equal
+```
+
+Summary of affinity propagation results:
+
+* better in `r ap.better`/`r all` cases (`r round(ap.better/all*100, 2)`%),
+* worse in `r ap.worse`/`r all` cases (`r round(ap.worse/all*100, 2)`%),
+* equal in `r ap.equal`/`r all` cases (`r round(ap.equal/all*100, 2)`%).
+
+```{r echo=FALSE}
+showResultsSummary(result, "ap")
+```
+
+Summary of k-means results:
+
+* better in `r km.better`/`r all` cases (`r round(km.better/all*100, 2)`%),
+* worse in `r km.worse`/`r all` cases (`r round(km.worse/all*100, 2)`%),
+* equal in `r km.equal`/`r all` cases (`r round(km.equal/all*100, 2)`%).
+
+```{r echo=FALSE}
+showResultsSummary(result, "km")
+```
+
+To check whether there are any significant differences between the proposed approaches, we performed the Friedman statistical test with a post-hoc Nemenyi test, the results of which are presented below for linear SVM.
+
+```{r echo=FALSE}
+friedmanData <- result %>% 
+    dplyr::select(Dataset, Classifier, Clustering, Accuracy) %>%
+    dplyr::filter(Classifier=="svmLinear") %>%
+    spread(Clustering, Accuracy) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(-Dataset, -Classifier) %>%
+    data.matrix()
+
+friedmanData <- t(apply(friedmanData, 1, rank))
+friedmanData <- friedmanData[, order(colMeans(friedmanData, na.rm=TRUE))]
+print(colMeans(friedmanData, na.rm=TRUE))
+friedman.test(friedmanData)
+posthoc.friedman.nemenyi.test(friedmanData)
+plotCD(results.matrix = friedmanData, alpha = 0.05)
+```
+
+
+```{r echo=FALSE, eval=FALSE}
+result.display = result %>% 
+    dplyr::mutate(Accuracy = round(Accuracy, 4), Kappa = round(Kappa, 4)) %>%
+    dplyr::select(Dataset, Classifier, Clustering, FeatureType, Accuracy, Kappa)
+
+DT::datatable(result.display,
+              style="bootstrap", filter = "top", rownames = FALSE, extensions = "Buttons",
+              options = list(
+                  autoWidth = TRUE,
+                  dom = 'Bfrtip',
+                  buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+```
+
+New results...
+
+```{r echo=FALSE}
+
+result.file.orig = "results/kbs/09classifiers/originalFeaturesTest_result.csv"
+result.file.augm = "results/kbs/09classifiers/bothFeaturesDistTest_result.csv"
+
+result.orig = read.table(file=result.file.orig, sep=",", header=TRUE)
+result.augm = read.table(file=result.file.augm, sep=",", header=TRUE)
+
+result.avg.orig = result.orig %>%
+    dplyr::group_by(Classifier, Dataset) %>%
+    dplyr::summarise(orig=mean(TestAccuracy))
+
+result.avg.augm = result.augm %>%
+    dplyr::group_by(Classifier, Dataset) %>%
+    dplyr::summarise(augm=mean(TestAccuracy))
+
+result.display = result.avg.orig %>%
+    full_join(result.avg.augm, by=c("Classifier", "Dataset"))
+
+test.results = rbind(cbind(result.orig, Features="Orig"), cbind(result.augm, Features="Augm"))
+
+for(classifier in unique(test.results$Classifier)) {
+    print("---------------------------------------------------------------------")
+    print(classifier)
+    print("---------------------------------------------------------------------")
+    
+    #pdf(paste0(classifier, ".boxplots.pdf"), width=8, height=6)
+    #ggboxplot(test.results[test.results$Classifier==classifier, ], x = "Features", y = "TestAccuracy", 
+    #              color = "Features", ylab = "Accuracy", xlab = "Features") +
+    #    facet_wrap( ~ Dataset, ncol=4, scales = "free_y") +
+    #    theme_bw() +
+    #    theme(legend.position = "top")
+    #dev.off()
+    
+    for(dataset in setdiff(supportedDatasets, c("letter","magic"))) {
+        print("---------------------------------------------------------------------")
+        print(dataset)
+        print("---------------------------------------------------------------------")
+        
+        tryCatch({
+            print(t.test(TestAccuracy ~ Features, data = test.results[test.results$Dataset==dataset & test.results$Classifier==classifier, ]))
+        },
+        error=function(cond){
+            print(paste("Error:", cond))  
+        })
+    }
+    
+    #print(wilcox.test(result.display[result.display$Classifier == classifier, ]$orig, result.display[result.display$Classifier == classifier, ]$augm))
+}
+
+```
+
+5.2 Cluster representation test
+
+After clustering of the training examples, there are many ways we can use this information to create new features.
+In this experiment, we will compare several methods to determine which one works best.
+The two main options are encoding each cluster as a binary or a numerical feature.
+In the binary case, the values indicate wheter examples belong to a given cluster (1) or not (0).
+In the numerical case, the values indicate the distance from each example to a given cluster representative.
+There are also many possible variations of these two variants.
+All in all, We will consider the following options:
+
+* binary features --- each feature indicates whether examples belong to a given cluster (1) or not (0),
+* distance features --- each feature indicates the distance from ceach example to a given cluster representative,
+* binary features weighted by distance --- binary features multiplied by distance features,
+* distance features weighted by Fisher score --- distance features multiplied by their Fisher score,
+* reversed squared distance --- $\frac{1}{distance^2}$.
+
+```{r echo=FALSE}
+
+result.file.bin = "results/kbs/01representation/svmApFeaturesOnlyBinaryTest_result.csv"
+result.file.dist = "results/kbs/01representation/svmApFeaturesOnlyDistTest_result.csv"
+result.file.bin.dist = "results/kbs/01representation/svmApFeaturesOnlyBinaryDistTest_result.csv"
+#result.file.distFS = "results/kbs/01representation/svmApFeaturesOnlyDistFSTest_result.csv"
+result.file.revDist2 = "results/kbs/01representation/svmApFeaturesOnlyRevDistSquaredTest_result.csv"
+
+result.bin = read.table(file=result.file.bin, sep=",", header=TRUE)
+result.dist = read.table(file=result.file.dist, sep=",", header=TRUE)
+result.bin.dist = read.table(file=result.file.bin.dist, sep=",", header=TRUE)
+#result.distFS = read.table(file=result.file.distFS, sep=",", header=TRUE)
+result.revDist2 = read.table(file=result.file.revDist2, sep=",", header=TRUE)
+
+all.results = data.frame(Dataset=result.bin$Dataset, binary=result.bin$TestAccuracy, distance=result.dist$TestAccuracy, "bin.dist."=result.bin.dist$TestAccuracy, "inv.dist^2"=result.revDist2$TestAccuracy)#, "distFS"=result.distFS$TestAccuracy)
+
+test.results = all.results %>%
+    tidyr::gather("Representation", "Accuracy", 2:5)
+
+pdf("representation.boxplots.pdf", width=8, height=7)
+ggboxplot(test.results, x = "Representation", y = "Accuracy",
+          color = "Representation", ylab = "Accuracy", xlab = "Representation") +
+    facet_wrap( ~ Dataset, ncol=4, scales = "free_y") +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1), legend.position = "top")
+dev.off()
+
+#for(dataset in setdiff(supportedDatasets,c("letter","magic"))) {
+#    print("---------------------------------------------------------------------")
+#    print(dataset)
+#    print("---------------------------------------------------------------------")
+#    
+#    #pdf(paste0("representation.", dataset, ".pdf"), width=6, height=4)
+#    #print(ggboxplot(test.results[test.results$Dataset==dataset, ], x = "Representation", y = #"Accuracy", 
+#    #          color = "Representation", ylab = "Accuracy", xlab = "Representation"))
+#    #dev.off()
+#    
+#    res.aov <- aov(Accuracy ~ Representation, data = test.results[test.results$Dataset==dataset, ])
+#    print(summary(res.aov))
+#    
+#    print(pairwise.t.test(test.results[test.results$Dataset==dataset, ]$Accuracy, #test.results[test.results$Dataset==dataset, ]$Representation, p.adjust.method = "BH"))
+#    
+#    # Checking variance homogeniety
+#    library(car)
+#    print(leveneTest(Accuracy ~ Representation, data = test.results[test.results$Dataset==dataset, #]))
+#    
+#    # Checking normality
+#    aov_residuals <- residuals(object = res.aov )
+#    print(shapiro.test(x = aov_residuals ))
+#}
+```
+
+The results clearly indicate that the distance-based approach is superior to all other variants.
+To further verify this observation we performed the Friedman and the post-hoc Nemenyi tests, which confirm that, indeed, distance-based approach is significantly better than the alternatives.
+
+```{r echo=FALSE}
+friedmanData <- all.results %>% 
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise("bin."=mean(binary), "dist."=mean(distance), "bin.dist."=mean(bin..dist.), "inv.dist.2"=mean(inv.dist.2), "distFS"=mean(distFS)) %>%
+    dplyr::select(-Dataset) %>%
+    data.matrix()
+
+friedmanData <- t(apply(friedmanData, 1, rank))
+friedmanData <- friedmanData[, order(colMeans(friedmanData, na.rm=TRUE))]
+print(colMeans(friedmanData, na.rm=TRUE))
+friedman.test(friedmanData)
+posthoc.friedman.nemenyi.test(friedmanData)
+pdf("representation.friedman.pdf", width=6, height=3)
+plotCD(results.matrix = friedmanData, alpha = 0.05)
+dev.off()
+```
+
+5.3 Comparison of clustering algorithms
+
+```{r echo=FALSE}
+
+result.file.ap = "results/kbs/02clustering/svmApFeaturesOnlyDistTest_result.csv"
+result.file.km = "results/kbs/02clustering/svmKmFeaturesOnlyDistTest_result.csv"
+result.file.sc = "results/kbs/02clustering/svmScFeaturesOnlyDistTest_result.csv"
+
+result.ap = read.table(file=result.file.ap, sep=",", header=TRUE)
+result.km = read.table(file=result.file.km, sep=",", header=TRUE)
+result.sc = read.table(file=result.file.sc, sep=",", header=TRUE)
+
+result.ap.avg = result.ap %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(ap=mean(TestAccuracy))
+
+result.km.avg = result.km %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(km=mean(TestAccuracy))
+
+result.sc.avg = result.sc %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(sc=mean(TestAccuracy))
+
+result.display = result.ap.avg %>%
+    full_join(result.km.avg, by="Dataset") %>%
+    full_join(result.sc.avg, by="Dataset")
+
+test.results = rbind(result.ap, result.km, result.sc)
+
+pdf("clustering.boxplots.pdf", width=8, height=7)
+ggboxplot(test.results, x = "Clustering", y = "TestAccuracy", 
+              color = "Clustering", ylab = "Accuracy", xlab = "Clustering") +
+    facet_wrap( ~ Dataset, ncol=4, scales = "free_y") +
+    theme_bw() +
+    theme(legend.position = "top")
+dev.off()
+
+for(dataset in setdiff(supportedDatasets, c("letter","magic"))) {
+    print("---------------------------------------------------------------------")
+    print(dataset)
+    print("---------------------------------------------------------------------")
+    
+    res.aov <- aov(TestAccuracy ~ Clustering, data = test.results[test.results$Dataset==dataset, ])
+    print(summary(res.aov))
+    
+    print(pairwise.t.test(test.results[test.results$Dataset==dataset, ]$TestAccuracy, test.results[test.results$Dataset==dataset, ]$Clustering, p.adjust.method = "BH"))
+    
+    # Checking variance homogeniety
+    library(car)
+    print(leveneTest(TestAccuracy ~ Clustering, data = test.results[test.results$Dataset==dataset, ]))
+    
+    # Checking normality
+    aov_residuals <- residuals(object = res.aov )
+    print(shapiro.test(x = aov_residuals ))
+}
+```
+
+```{r echo=FALSE}
+friedmanData <- result.display %>% 
+    dplyr::select(-Dataset) %>%
+    data.matrix()
+
+friedmanData <- t(apply(friedmanData, 1, rank))
+friedmanData <- friedmanData[, order(colMeans(friedmanData, na.rm=TRUE))]
+print(colMeans(friedmanData, na.rm=TRUE))
+friedman.test(friedmanData)
+posthoc.friedman.nemenyi.test(friedmanData)
+#pdf("clustering.friedman.pdf", width=6, height=3)
+#plotCD(results.matrix = friedmanData, alpha = 0.05)
+#dev.off()
+```
+
+5.4 Global vs local clustering
+
+The intuition behind our approach is that clustering of training examples regardless of their class could help generalization through the use of global information.
+We refer to this approach as global.
+However, one could argue for an alternative approach in which clustering is performed per class.
+We call this approach local.
+This way, we are still adding some global information about distant objects' similarity, however, with the additional potential benefit of modeling the space occupied by each class.
+To verify which of these approaches is better, we compared these two approaches empirically.
+
+To make the comparison meaningful, we have to ensure an equal number of clusters in both approaches, to make sure that the results solely rely on the generated clusters and not their quantity.
+To achieve this goal, the experiment was performed as follows.
+First, we performed the clustering separately in each class using affinity propagation to automatically determine the number of clusters.
+Next, we performed the same experiment using the global approach using k-means with the number of clusters equal to the total number of clusters in all classes.
+The results of this experiment are presented below.
+
+```{r echo=FALSE}
+
+result.file.local = "results/kbs/03local_global/svmApFeaturesOnlyDistLocalTest_result.csv"
+result.file.global = "results/kbs/03local_global/svmKmFeaturesOnlyDistGlobalTest_result.csv"
+
+result.local = read.table(file=result.file.local, sep=",", header=TRUE) %>%
+    dplyr::select(-Clustering)
+result.global = read.table(file=result.file.global, sep=",", header=TRUE) %>%
+    dplyr::select(-Clustering)
+
+result.avg.local = result.local %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(local=mean(TestAccuracy))
+
+result.avg.global = result.global %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(global=mean(TestAccuracy))
+
+result.display = result.avg.local %>%
+    full_join(result.avg.global, by="Dataset")
+
+test.results = rbind(cbind(result.local, Clustering="local"), cbind(result.global, Clustering="global"))
+
+pdf("localGlobal.boxplots.pdf", width=8, height=6)
+ggboxplot(test.results, x = "Clustering", y = "TestAccuracy", 
+              color = "Clustering", ylab = "Accuracy", xlab = "Clustering") +
+    facet_wrap( ~ Dataset, ncol=4, scales = "free_y") +
+    theme_bw() +
+    theme(legend.position = "top")
+dev.off()
+
+for(dataset in setdiff(supportedDatasets, c("letter","magic"))) {
+    print("---------------------------------------------------------------------")
+    print(dataset)
+    print("---------------------------------------------------------------------")
+    
+    print(t.test(TestAccuracy ~ Method, data = test.results[test.results$Dataset==dataset, ]))
+}
+```
+
+The results of this experiment do not show a clear winner, although the global approach works better in more cases than the local.
+Nevertheless, the Wilcoxon signed ranks test was unable to find a significant difference between these two approaches at alpha=0.05, so we conclude that both approaches are equally valid.
+Given the above, we lean towards the global approach as it generally detects smaller number of clusters and, therefore, generates less new features which, in turn, helps generalization.
+
+```{r echo=FALSE}
+wilcox.test(result.display$global, result.display$local, alternative = "greater")
+```
+
+5.5 Supervised vs semi-supervised learning
+
+Since the method discussed in this research creates new features regardless of the decision attribute, it is very easy to use it in a semi-supervised setting.
+Therefore, in this experiment we would like to check whether clustering on both training and testing data will produce better features.
+
+```{r echo=FALSE}
+
+result.file.semi = "results/kbs/07semi_supervised/semiSupervisedApFeaturesOnlyDistTest_result.csv"
+result.file.full = "results/kbs/07semi_supervised/supervisedKmFeaturesOnlyDistTest_result.csv"
+
+result.semi = read.table(file=result.file.semi, sep=",", header=TRUE)
+result.full = read.table(file=result.file.full, sep=",", header=TRUE)
+
+result.avg.semi = result.semi %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(Semi=mean(TestAccuracy))
+
+result.avg.full = result.full %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(Full=mean(TestAccuracy))
+
+result.display = result.avg.semi %>%
+    full_join(result.avg.full, by="Dataset")
+
+test.results = rbind(cbind(result.semi, Supervision="Semi"), cbind(result.full, Supervision="Full"))
+
+pdf("semi.boxplots.pdf", width=8, height=6)
+ggboxplot(test.results, x = "Supervision", y = "TestAccuracy", 
+              color = "Supervision", ylab = "Accuracy", xlab = "Supervision") +
+    facet_wrap( ~ Dataset, ncol=4, scales = "free_y") +
+    theme_bw() +
+    theme(legend.position = "top")
+dev.off()
+
+for(dataset in setdiff(supportedDatasets, c("letter","magic"))) {
+    print("---------------------------------------------------------------------")
+    print(dataset)
+    print("---------------------------------------------------------------------")
+    
+    print(t.test(TestAccuracy ~ Supervision, data = test.results[test.results$Dataset==dataset, ]))
+}
+```
+
+```{r echo=FALSE}
+wilcox.test(result.display$Semi, result.display$Full)
+```
+
+5.6 Distance measure
+
+```{r echo=FALSE}
+
+result.file.maha = "results/kbs/06distance/svmKmFeaturesOnlyDistMahalanobisTest_result.csv"
+result.file.eucl = "results/kbs/06distance/svmKmFeaturesOnlyDistTest_result.csv"
+
+result.maha = read.table(file=result.file.maha, sep=",", header=TRUE)
+result.eucl = read.table(file=result.file.eucl, sep=",", header=TRUE)
+
+result.avg.maha = result.maha %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(Maha=mean(TestAccuracy))
+
+result.avg.eucl = result.eucl %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(Eucl=mean(TestAccuracy))
+
+result.display = result.avg.maha %>%
+    full_join(result.avg.eucl, by="Dataset")
+
+test.results = rbind(cbind(result.maha, Distance="Mahalanobis"), cbind(result.eucl, Distance="Euclidean"))
+
+pdf("distance.boxplots.pdf", width=8, height=6)
+ggboxplot(test.results, x = "Distance", y = "TestAccuracy", 
+              color = "Distance", ylab = "Accuracy", xlab = "Distance") +
+    facet_wrap( ~ Dataset, ncol=4, scales = "free_y") +
+    theme_bw() +
+    theme(legend.position = "top")
+dev.off()
+
+for(dataset in setdiff(supportedDatasets, c("letter","magic","image-segmentation"))) {
+    print("---------------------------------------------------------------------")
+    print(dataset)
+    print("---------------------------------------------------------------------")
+    
+    print(t.test(TestAccuracy ~ Distance, data = test.results[test.results$Dataset==dataset, ]))
+}
+```
+
+```{r echo=FALSE}
+wilcox.test(result.display$Maha, result.display$Eucl)
+```
+
+5.7 Sensitivity test
+
+In this experiment we will examine how the number of clusters influences the quality of classification.
+We will only analyze the new features and discard the original ones.
+In addition to test set accuracy, we will also report training set accuracy to check when the model starts overfitting due to high dimensionality of the new feature space.
+We will vary the number of clusters from 1 to a ridiculus 200, just to observe what impact will it exactly have on classification quality.
+Let us begin with linear SVM on pima-indians-diabetes dataset.
+
+```{r echo=FALSE}
+
+sensitivity.data = NULL
+for(dataset in setdiff(supportedDatasets, c("letter","magic"))) {
+    result.file = paste0("results/kbs/04sensitivity/sensitivityTest_km_",dataset,"_svm_result.csv")
+    
+    sensitivity.data = rbind(sensitivity.data, read.table(file=result.file, sep=",", header=TRUE))
+}
+
+sensitivity.data = sensitivity.data %>%
+    dplyr::group_by(Dataset, K) %>%
+    dplyr::summarise(Test=mean(TestAccuracy), Train=mean(TrainAccuracy))
+
+vline.file = "results/kbs/02clustering/svmApFeaturesOnlyDistTest_result.csv"
+vline.data = read.table(file=vline.file, sep=",", header=TRUE) %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(MeanK=mean(K)) %>%
+    dplyr::mutate(MeanK=round(MeanK))
+
+#pdf("sensitivity.pdf", width=8, height=8)
+ggplot(sensitivity.data) +
+    geom_line(aes(x=K, y=Test, color = "test")) +
+    xlab("Number of clusters") + ylab("Accuracy") +
+    facet_wrap( ~ Dataset, ncol=4, scales = "free") +
+    geom_line(aes(x=K, y=Train, color = "train")) +
+    geom_vline(data=vline.data, mapping = aes(xintercept=MeanK)) +
+    scale_color_manual(name = "Accuracy", values = c("train" = "#004488", "test" = "#DDAA33")) +
+    theme_bw() +
+    theme(legend.position="top")
+#dev.off()
+```
+
+As we can see, after reaching a test accuracy of approximately 78\% with around 20 clusters, the test accuracy stops improving and starts diverging from the training accuracy at around k=35 mark, while the training accuracy keeps getting better, which is a clear sign of overfitting.
+Since SVM is a reasonably robust algorithm, this effect isn't as dramatic as one would expect, so in order to emphasize this issue let us use a simple logistic regression classifier to get a clear indication where the overfitting actually begins.
+
+Now we can observe this effect even clearer, with first significant differences appearing at around k=30 and the two lines clearly starting to diverge after k=40 mark.
+Interestingly, affinity propagation picked 35 as the number of clusters for this dataset, which (judging by these plots) seems just about right!
+
+Now let's look how this experiment turns out for other datasets with linear SVM.
+
+```{r echo=FALSE}
+
+km.results = read.table(file="results/kbs/02clustering/svmKmFeaturesOnlyDistTest_result.csv", sep=",", header=TRUE)
+
+for(d in supportedDatasets) {
+    if(d != "magic" && d != "letter") {
+        
+        k = (km.results %>%
+            dplyr::filter(Dataset == d) %>%
+            dplyr::summarise(K=mean(K)) %>%
+            dplyr::select(K))[[1]]
+    
+        result.file = paste0("results/kbs/04sensitivity/sensitivityTest_km_",d , "_svm_result.csv")
+    
+        sensitivity.data = read.table(file=result.file, sep=",", header=TRUE)
+        
+        p = ggplot(sensitivity.data, aes(x=1:nrow(sensitivity.data))) +
+            geom_line(aes(y=TrainAccuracy, color = "train")) +
+            geom_line(aes(y=TestAccuracy, color = "test")) +
+            geom_vline(xintercept=k) +
+            scale_color_manual(name = "Accuracy", values = c("train" = "blue", "test" = "green")) +
+            xlab("Number of clusters") + ylab("Accuracy")
+        
+        print(d)
+        print(p)
+    }
+}
+```
+
+5.8 Is there any differnce between high and low quality features?
+
+Since we have already established in our sensitivity experiment that the number of clusters has a clear influence on the quality of classification, let us now check wherer the quality of the new features as treated separately makes any difference.
+In order to do so, we will cluster the dataset into a certain number of clusters, encode the clusters as new features, and evaluate the quality of each new feature using Fisher Score.
+Next, we will add new features one by one in order of their increasing and decreasing quality in order to observe the effect they have on classification accuracy.
+Again, we will use linear SVM and pima-indians-diabetes dataset with k=35 (as determined by affinity propagation).
+
+```{r echo=FALSE}
+
+top.data = NULL
+top.file.desc = "results/kbs/05feature_quality/featureQualityTest_result_desc.csv"
+top.file.asc  = "results/kbs/05feature_quality/featureQualityTest_result_asc.csv"
+
+top.data.desc = read.table(file=top.file.desc, sep=",", header=TRUE) %>%
+    dplyr::group_by(Dataset, K) %>%
+    dplyr::summarise(Top=mean(TestAccuracy)) %>%
+    dplyr::select(Dataset, K, Top)
+
+top.data.asc = read.table(file=top.file.asc, sep=",", header=TRUE) %>%
+    dplyr::group_by(Dataset, K) %>%
+    dplyr::summarise(Bottom=mean(TestAccuracy)) %>%
+    dplyr::select(Dataset, K, Bottom)
+
+curr.top.data = top.data.desc %>%
+    dplyr::inner_join(top.data.asc, by=c("Dataset", "K"))
+
+top.data = rbind(top.data, curr.top.data)
+
+pdf("featureQuality.pdf", width=8, height=8)
+ggplot(top.data) +
+    geom_line(aes(x=K, y=Top, color = "top")) +
+    xlab("Number of clusters") + ylab("Accuracy") +
+    facet_wrap( ~ Dataset, ncol=4, scales = "free") +
+    geom_line(aes(x=K, y=Bottom, color = "bottom")) +
+    scale_color_manual(name = "Accuracy", values = c("bottom" = "#004488", "top" = "#DDAA33")) +
+    theme_bw() +
+    theme(legend.position="top")
+dev.off()
+```
+
+Ultimately what we are doing in our approach is selecting points in n-dimensional space and calculating the distances between all data points and these new points and encoding these points as new features.
+This plot proves (at least to some degree) that the choice of these points matters and has a high impact on the quality of classification.
+On the diagram, the blue line represents classfication quality when adding new features according to their descending fisher score, while the green line represents the same in an ascending order.
+The lines obvoiusly meet at the end, since in both cases in the end all features are used for classification.
+However, what happens before that is a clear indication that some points (clusters) hold more information than others.
+
+5.9 All vs new vs no
+
+```{r echo=FALSE}
+
+result.file.org = "results/kbs/08original_new_both/noNewFeaturesTest_result.csv"
+result.file.new = "results/kbs/08original_new_both/svmApFeaturesOnlyDistTest_result.csv"
+result.file.bot = "results/kbs/08original_new_both/apAllFeaturesTest_result.csv"
+
+result.org = read.table(file=result.file.org, sep=",", header=TRUE)
+result.new = read.table(file=result.file.new, sep=",", header=TRUE)
+result.bot = read.table(file=result.file.bot, sep=",", header=TRUE)
+
+result.org.avg = result.org %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(Orig=mean(TestAccuracy))
+
+result.new.avg = result.new %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(New=mean(TestAccuracy))
+
+result.bot.avg = result.bot %>%
+    dplyr::group_by(Dataset) %>%
+    dplyr::summarise(Both=mean(TestAccuracy))
+
+result.display = result.org.avg %>%
+    full_join(result.new.avg, by="Dataset") %>%
+    full_join(result.bot.avg, by="Dataset")
+
+all.results = data.frame(Dataset=result.org$Dataset, Original=result.org$TestAccuracy, New=result.new$TestAccuracy, Both=result.bot$TestAccuracy)
+
+test.results = all.results %>%
+    tidyr::gather("Features", "Accuracy", 2:4)
+#
+#pdf("features.boxplots.pdf", width=8, height=7)
+#ggboxplot(test.results, x = "Features", y = "Accuracy", 
+#              color = "Features", ylab = "Accuracy", xlab = "Features") +
+#    facet_wrap( ~ Dataset, ncol=4, scales = "free_y") +
+#    theme_bw() +
+#    theme(legend.position = "top")
+#dev.off()
+
+for(dataset in setdiff(supportedDatasets, c("letter","magic"))) {
+    print("---------------------------------------------------------------------")
+    print(dataset)
+    print("---------------------------------------------------------------------")
+    
+    res.aov <- aov(Accuracy ~ Features, data = test.results[test.results$Dataset==dataset, ])
+    print(summary(res.aov))
+    
+    print(pairwise.t.test(test.results[test.results$Dataset==dataset, ]$Accuracy, test.results[test.results$Dataset==dataset, ]$Features, p.adjust.method = "BH"))
+    
+    # Checking variance homogeniety
+    library(car)
+    print(leveneTest(Accuracy ~ Features, data = test.results[test.results$Dataset==dataset, ]))
+    
+    # Checking normality
+    aov_residuals <- residuals(object = res.aov )
+    print(shapiro.test(x = aov_residuals ))
+}
+```
+
+```{r echo=FALSE}
+friedmanData <- result.display %>% 
+    dplyr::select(-Dataset) %>%
+    data.matrix()
+
+friedmanData <- t(apply(friedmanData, 1, rank))
+friedmanData <- friedmanData[, order(colMeans(friedmanData, na.rm=TRUE))]
+print(colMeans(friedmanData, na.rm=TRUE))
+friedman.test(friedmanData)
+posthoc.friedman.nemenyi.test(friedmanData)
+#pdf("features.friedman.pdf", width=6, height=3)
+#plotCD(results.matrix = friedmanData, alpha = 0.05)
+#dev.off()
+```
+
+5.10 Comparison between points selected by clustering and points uniformly distributed across feature space.
+
+Since in the previous point we have established that the positioning of the points in the feature space matters, in this experiment we will compare features generated by clustering with features generated by adding uniformly distributed points in the feature space.
+
+```{r echo=FALSE}
+
+result.file.clu = "results/img.km56.desc.FS.repeated10.csv"
+result.file.unf = "results/img.unf56.desc.FS.repeated10.csv"
+
+top.data.clu = read.table(file=result.file.clu, sep=",", header=TRUE)
+top.data.unf = read.table(file=result.file.unf, sep=",", header=TRUE)
+
+top.data = data.frame(k=top.data.clu$K, clu=top.data.clu$TestAccuracy, unf=top.data.unf$TestAccuracy)
+
+p = ggplot(top.data, aes(x=k)) +
+    geom_line(aes(y=clu, color = "clu")) +
+    geom_line(aes(y=unf, color = "unf")) +
+    scale_color_manual(name = "Accuracy", values = c("clu" = "blue", "unf" = "green")) +
+    xlab("Number of clusters") + ylab("Accuracy")
+
+ggplotly(p)
+```
+
+Now this is very interesting!
+Granted this is only for a single dataset with total number of features picked based on affinity propagation clustering, if this result holds for other datasets it will mean that clustering itself does not produce any additional useful information - it is the proposed distance-from-points-based feature transformation that causes the improvements in classification quality.
+Let's test the same hypothesis on a larger dataset (optdigits).
+
+```{r echo=FALSE}
+
+result.file.clu = "results/optdigits.km178.desc.FS.repeated1.csv"
+result.file.unf = "results/optdigits.unf178.desc.FS.repeated1.csv"
+
+top.data.clu = read.table(file=result.file.clu, sep=",", header=TRUE)
+top.data.unf = read.table(file=result.file.unf, sep=",", header=TRUE)
+
+top.data = data.frame(k=top.data.clu$K, clu=top.data.clu$TestAccuracy, unf=top.data.unf$TestAccuracy)
+
+p = ggplot(top.data, aes(x=k)) +
+    geom_line(aes(y=clu, color = "clu")) +
+    geom_line(aes(y=unf, color = "unf")) +
+    scale_color_manual(name = "Accuracy", values = c("clu" = "blue", "unf" = "green")) +
+    xlab("Number of clusters") + ylab("Accuracy")
+
+ggplotly(p)
+```
+
+Although the experiment has not been repeated 10 times, as was in the previous case, some characteristic is stil visible and it seems to be reversed!
+I guess we have to check more datasets to verify the hipothesis about uniformly distributed points.

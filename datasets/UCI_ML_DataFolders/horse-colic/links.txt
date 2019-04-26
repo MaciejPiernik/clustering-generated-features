@@ -1,0 +1,2 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/horse-colic/horse-colic.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/horse-colic/horse-colic.test

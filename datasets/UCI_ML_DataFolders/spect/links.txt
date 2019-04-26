@@ -1,0 +1,4 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/spect/SPECT.train
+http://archive.ics.uci.edu/ml/machine-learning-databases/spect/SPECT.test
+http://archive.ics.uci.edu/ml/machine-learning-databases/spect/SPECTF.train
+http://archive.ics.uci.edu/ml/machine-learning-databases/spect/SPECTF.test

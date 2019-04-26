@@ -1,0 +1,9 @@
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/allhyper.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/allhyper.test
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/allhypo.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/allhypo.test
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/allrep.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/allrep.test
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/new-thyroid.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/sick.data
+http://archive.ics.uci.edu/ml/machine-learning-databases/thyroid-disease/sick.test

@@ -1,0 +1,2 @@
+# Uncompress the file "connect-4.data.Z" after download, for example, using "gunzip".
+http://archive.ics.uci.edu/ml/machine-learning-databases/connect-4/connect-4.data.Z
